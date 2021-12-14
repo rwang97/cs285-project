@@ -289,8 +289,11 @@ class ppo2:
         def add_to_replay_buffer(self, paths):
             self.replay_buffer.add_rollouts(paths)
 
-        def sample(self, batch_size):
+        def sample_recent(self, batch_size):
             return self.replay_buffer.sample_recent_data(batch_size, concat_rew=False)
+
+        def sample_random(self, batch_size):
+            return self.replay_buffer.sample_random_data(batch_size)
 
         def observe(self, obs):
             # print('true obs shape')
@@ -382,7 +385,7 @@ class ppo2:
                 path = utils.Path(prev_obs, actions, rewards, self.obs, self.dones)
                 paths.append(path)
             self.add_to_replay_buffer(paths)
-            ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.sample(5)
+            # ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.sample_random(5)
             # print(ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch)
             # print(ob_batch.shape)
             # print(ac_batch.shape)
