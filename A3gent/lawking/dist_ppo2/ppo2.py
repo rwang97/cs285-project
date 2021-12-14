@@ -258,7 +258,7 @@ class ppo2:
     class Runner(object):
 
         def __init__(self, *, env, model, nsteps, gamma, lam):
-            self.replay_buffer = ReplayBuffer(1000000)
+            self.replay_buffer = ReplayBuffer(12000)
 
             self.env = env
             self.model = model
