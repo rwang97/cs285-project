@@ -29,6 +29,7 @@ class ReplayBuffer(object):
 
         # convert new rollouts into their component arrays, and append them onto our arrays
         observations, actions, next_observations, terminals, concatenated_rews, unconcatenated_rews = convert_listofrollouts(paths)
+        del paths
 
         if noised:
             observations = add_noise(observations)
@@ -50,11 +51,11 @@ class ReplayBuffer(object):
                 self.terminals = self.terminals[-(self.max_size-len(terminals)):]
                 self.concatenated_rews = self.concatenated_rews[-(self.max_size-len(concatenated_rews)):]
 
-                self.obs = np.concatenate([self.obs[-(self.max_size-len(observations)):], observations])
-                self.acs = np.concatenate([self.acs[-(self.max_size-len(actions)):], actions])
-                self.next_obs = np.concatenate([self.next_obs[-(self.max_size-len(next_observations)):], next_observations])
-                self.terminals = np.concatenate([self.terminals[-(self.max_size-len(terminals)):], terminals])
-                self.concatenated_rews = np.concatenate([self.concatenated_rews[-(self.max_size-len(concatenated_rews)):], concatenated_rews])
+                self.obs = np.concatenate([self.obs, observations])
+                self.acs = np.concatenate([self.acs, actions])
+                self.next_obs = np.concatenate([self.next_obs, next_observations])
+                self.terminals = np.concatenate([self.terminals, terminals])
+                self.concatenated_rews = np.concatenate([self.concatenated_rews, concatenated_rews])
                 
                 # print(self.obs.shape, self.max_size, len(concatenated_rews), self.max_size-len(concatenated_rews))
                 # self.obs = np.concatenate([self.obs, observations])[-self.max_size:]
