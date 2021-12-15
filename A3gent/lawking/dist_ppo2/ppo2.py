@@ -113,6 +113,7 @@ class ppo2:
 
             if local_model:
                 self.step = local_model.act_model.step
+                self.step_ent = local_model.act_model.step_ent
                 self.value = local_model.act_model.value
                 self.step_given_action = local_model.act_model.step_given_action
                 self.initial_state = local_model.act_model.initial_state
@@ -122,6 +123,7 @@ class ppo2:
 
             else:
                 self.step = self.act_model.step
+                self.step_ent = self.act_model.step_ent
                 self.value = self.act_model.value
                 self.step_given_action = self.act_model.step_given_action
                 self.initial_state = self.act_model.initial_state
@@ -161,7 +163,7 @@ class ppo2:
             vf_losses1 = tf.square(vpred - R)
             vf_losses2 = tf.square(vpredclipped - R)
             vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
-            rew_loss = tf.reduce_mean(tf.square(rewardpred - REWARD))
+            rew_loss = tf.reduce_mean(tf.square(rewardpred - REWARD)) * 0.2
             ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
             pg_losses = -ADV * ratio
             pg_losses2 = -ADV * tf.clip_by_value(ratio, 1.0 - CLIPRANGE, 1.0 + CLIPRANGE)
@@ -276,14 +278,15 @@ class ppo2:
     class Runner(object):
 
         def __init__(self, *, env, model, nsteps, gamma, lam):
-            self.replay_buffer = ReplayBuffer(9000)
-
             self.env = env
             self.model = model
             self.nenv = env.num_envs
             self.obshape = env.observation_space.shape
             print('observation_space shape')
             print(self.obshape)
+
+            self.replay_buffer = ReplayBuffer(50000, self.env.action_space.n)
+
 
             self.frames = []
             for i in range(self.nenv):
@@ -354,12 +357,14 @@ class ppo2:
         def run(self, sess):
             print('self.epson=%f' % self.epson)
 
-            mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
+            mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs, mb_next_obs = [],[],[],[],[],[],[]
             mb_states = self.states
             epinfos = []
             paths = []
             for _ in range(self.nsteps):
+                #print(f"{_} / {self.nsteps}")
                 actions, values, self.states, neglogpacs = self.model.step(sess, self.obs, self.states, self.dones)
+
                 # print(actions, values, self.obs.shape, self.states)
                 # print(self.obshape)
                 # print(self.nsteps)
@@ -385,6 +390,7 @@ class ppo2:
                 self.observe(obs)
 
                 mb_rewards.append(rewards)
+                mb_next_obs.append(self.obs)
 
                 for i in range(self.nenv):
                     done = self.dones[i]
@@ -400,9 +406,10 @@ class ppo2:
                 # print("== next_obs: ", self.obs)
                 # print("== dones: ", self.dones)
                 # print(self.obs[0].shape, actions[0].shape, rewards[0].shape, obs[0].shape, self.dones[0].shape)
-                path = utils.Path(prev_obs, actions, rewards, self.obs, self.dones)
-                paths.append(path)
-            self.add_to_replay_buffer(paths)
+                #path = utils.Path(prev_obs, actions, rewards, self.obs, self.dones, entropy)
+                #paths.append(path)
+
+            #self.add_to_replay_buffer(paths)
             # ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.sample_random(5)
             # print(ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch)
             # print(ob_batch.shape)
@@ -413,6 +420,14 @@ class ppo2:
 
             #batch of steps to batch of rollouts
             mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
+            entropy = self.model.step_ent(sess, mb_obs.squeeze(1))[0]
+
+            for i in range(len(entropy)):
+                path = utils.Path(mb_obs[i], mb_actions[i], mb_rewards[i], mb_next_obs[i], mb_dones[i], np.array([entropy[i]]))
+                paths.append(path)
+            
+            self.add_to_replay_buffer(paths)
+
             mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
             mb_actions = np.asarray(mb_actions)
             mb_values = np.asarray(mb_values, dtype=np.float32)
@@ -521,7 +536,7 @@ class ppo2:
                         slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                         mblossvals.append(self.model.train(sess, lrnow, cliprangenow, *slices))
 
-                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(1000)
+                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5000)
                         # print(ob_batch.shape, obs.shape)
                         reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
 
@@ -540,7 +555,7 @@ class ppo2:
                         slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                         mbstates = states[mbenvinds]
                         mblossvals.append(self.model.train(sess, lrnow, cliprangenow, *slices, mbstates))
-                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5)
+                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5000)
                         reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
 
             lossvals = np.mean(mblossvals, axis=0)

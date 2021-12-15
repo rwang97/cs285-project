@@ -134,7 +134,7 @@ def sample_n_trajectories(env, policy, ntraj, max_path_length, render=False, ren
 ############################################
 ############################################
 
-def Path(obs, acs, rewards, next_obs, terminals):
+def Path(obs, acs, rewards, next_obs, terminals, ent):
     """
         Take info (separate arrays) from a single rollout
         and return it in a single dictionary
@@ -143,7 +143,8 @@ def Path(obs, acs, rewards, next_obs, terminals):
             "reward" : np.array(rewards, dtype=np.float32),
             "action" : np.array(acs, dtype=np.float32),
             "next_observation": np.array(next_obs, dtype=np.float32),
-            "terminal": np.array(terminals, dtype=np.float32)}
+            "terminal": np.array(terminals, dtype=np.float32),
+            "entropy": np.array(ent, dtype=np.float32)}
 
 
 def convert_listofrollouts(paths):
@@ -158,7 +159,8 @@ def convert_listofrollouts(paths):
     terminals = np.concatenate([path["terminal"] for path in paths])
     concatenated_rewards = np.concatenate([path["reward"] for path in paths])
     unconcatenated_rewards = [path["reward"] for path in paths]
-    return observations, actions, next_observations, terminals, concatenated_rewards, unconcatenated_rewards
+    concatenated_entropy = np.concatenate([path["entropy"] for path in paths])
+    return observations, actions, next_observations, terminals, concatenated_rewards, unconcatenated_rewards, concatenated_entropy
 
 ############################################
 ############################################

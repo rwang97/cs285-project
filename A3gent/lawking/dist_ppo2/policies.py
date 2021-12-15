@@ -175,8 +175,9 @@ class CnnPolicy(object):
             # print(vf)
             # print(neglogp0)
             # print(X)
+            #print(type(self.pd.entropy()))
             a, v, neglogp = sess.run([a0, vf, neglogp0], {X:ob})
-            return a, v, self.initial_state, neglogp
+            return a, v,  self.initial_state, neglogp
 
         def step_v2(sess, ob, *_args, **_kwargs):
             # print(a0)
@@ -185,6 +186,15 @@ class CnnPolicy(object):
             # print(X)
             a, v, neglogp, logits = sess.run([a0, vf, neglogp0, pi], {X:ob})
             return a, v, self.initial_state, neglogp, logits
+
+        def step_ent(sess, ob, *_args, **_kwargs):
+            # print(a0)
+            # print(vf)
+            # print(neglogp0)
+            # print(X)
+            #print(type(self.pd.entropy()))
+            ent = sess.run([self.pd.entropy()], {X:ob})
+            return ent
 
         def step_action(sess, ob, *_args, **_kwargs):
             a, v = sess.run([a0, vf], {X:ob})
@@ -211,6 +221,7 @@ class CnnPolicy(object):
         self.step_action = step_action
         self.value = value
         self.step_given_action = step_given_action
+        self.step_ent = step_ent
 
 
 class MlpPolicy(object):

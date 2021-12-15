@@ -3,7 +3,7 @@ from itertools import chain
 
 class ReplayBuffer(object):
 
-    def __init__(self, max_size=1000000):
+    def __init__(self, max_size=1000000, ac_dim=8):
 
         self.max_size = max_size
         self.paths = []
@@ -15,6 +15,10 @@ class ReplayBuffer(object):
         self.unconcatenated_rews = None
         self.next_obs = None
         self.terminals = None
+
+        # CEM parameters
+        self.cem_easy_sample_portion = 0.5
+        self.cem_hard_sample_portion = 0.05
 
     def add_rollouts(self, paths, noised=False):
 
@@ -28,8 +32,32 @@ class ReplayBuffer(object):
         # self.paths = list(chain.from_iterable(self.path_list))
 
         # convert new rollouts into their component arrays, and append them onto our arrays
-        observations, actions, next_observations, terminals, concatenated_rews, unconcatenated_rews = convert_listofrollouts(paths)
+        observations, actions, next_observations, terminals, concatenated_rews, unconcatenated_rews, concatenated_entropy = convert_listofrollouts(paths)
+        
+        # sub-sampling using entropy
+        easy_remain_amount = (int) ((self.cem_easy_sample_portion) * len(paths))
+        hard_remain_amount = (int) ((self.cem_hard_sample_portion) * len(paths))
         del paths
+
+
+        print("****************************************************")
+        print(concatenated_entropy.shape)
+        idx = np.argpartition(concatenated_entropy, len(concatenated_entropy) - 1)
+        min_ent_idx = idx[:easy_remain_amount]
+        max_ent_idx = idx[-hard_remain_amount:]
+        ent_idx = np.concatenate([min_ent_idx, max_ent_idx])
+
+        observations = observations[ent_idx]
+        actions = actions[ent_idx]
+        next_observations = next_observations[ent_idx]
+        terminals = terminals[ent_idx]
+        concatenated_rews = concatenated_rews[ent_idx]
+        print("****************************************************")
+        print(len(min_ent_idx))
+        print(len(max_ent_idx))
+        unconcatenated_rews = concatenated_rews.tolist()
+
+
 
         if noised:
             observations = add_noise(observations)
@@ -127,3 +155,15 @@ class ReplayBuffer(object):
     #         rollouts_to_return = self.paths[-num_recent_rollouts_to_return:]
     #         observations, actions, next_observations, terminals, concatenated_rews, unconcatenated_rews = convert_listofrollouts(rollouts_to_return)
     #         return observations, actions, unconcatenated_rews, next_observations, terminals
+
+
+    # def split_paths(self, paths):
+    #     #print((paths[0]["observation"].shape))
+
+    #     # (8192, 84, 84, 12)
+    #     # => (8, 1024, 84, 84, 12)
+    #     horizon = len(paths)
+    #     ac_dim = []
+    #     obs_sequences = np.zeros([self.cem_divide_num, horizon, ob_dim])
+    #     elites_mean = np.zeros([horizon, ob_dim])
+    #     elites_var = np.zeros([horizon, ob_dim, ob_dim])
