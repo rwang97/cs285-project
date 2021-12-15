@@ -105,11 +105,12 @@ def safemean(xs):
 class ppo2:
 
     class Model(object):
-        def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
+        def __init__(self, *, policy, env, ob_space, ac_space, nbatch_act, nbatch_train,
                     nsteps, ent_coef, vf_coef, max_grad_norm, scope='model', collections=None, trainable=True, local_model=None, global_step=None):
 
             self.scope = scope
             self.act_model = policy(ob_space, ac_space, nbatch_act, 1, scope, reuse=False, collections=collections, trainable=trainable)
+            self.env = env
 
             if local_model:
                 self.step = local_model.act_model.step
@@ -285,8 +286,7 @@ class ppo2:
             print('observation_space shape')
             print(self.obshape)
 
-            self.replay_buffer = ReplayBuffer(50000, self.env.action_space.n)
-
+            self.replay_buffer = ReplayBuffer(30000, self.env.action_space.n)
 
             self.frames = []
             for i in range(self.nenv):
@@ -484,7 +484,7 @@ class ppo2:
         self.nbatch = self.nenvs * nsteps
         self.nbatch_train = self.nbatch // nminibatches
 
-        self.make_model = lambda : self.Model(policy=policy, ob_space=self.ob_space, ac_space=self.ac_space, nbatch_act=self.nenvs, nbatch_train=self.nbatch_train,
+        self.make_model = lambda : self.Model(policy=policy, env=env, ob_space=self.ob_space, ac_space=self.ac_space, nbatch_act=self.nenvs, nbatch_train=self.nbatch_train,
                         nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
                         max_grad_norm=max_grad_norm, scope=scope, collections=collections, trainable=trainable, local_model=local_model, global_step=global_step)
 
