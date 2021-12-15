@@ -286,7 +286,7 @@ class ppo2:
             print('observation_space shape')
             print(self.obshape)
 
-            self.replay_buffer = ReplayBuffer(30000, self.env.action_space.n)
+            # self.replay_buffer = ReplayBuffer(30000, self.env.action_space.n)
 
             self.frames = []
             for i in range(self.nenv):
@@ -421,13 +421,13 @@ class ppo2:
 
             #batch of steps to batch of rollouts
             mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
-            entropy = self.model.step_ent(sess, mb_obs.squeeze(1))[0]
+            # entropy = self.model.step_ent(sess, mb_obs.squeeze(1))[0]
 
-            for i in range(len(entropy)):
-                path = utils.Path(mb_obs[i], mb_actions[i], mb_rewards[i], mb_next_obs[i], mb_dones[i], np.array([entropy[i]]))
-                paths.append(path)
+            # for i in range(len(entropy)):
+            #     path = utils.Path(mb_obs[i], mb_actions[i], mb_rewards[i], mb_next_obs[i], mb_dones[i], np.array([entropy[i]]))
+            #     paths.append(path)
             
-            self.add_to_replay_buffer(paths)
+            # self.add_to_replay_buffer(paths)
 
             mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
             mb_actions = np.asarray(mb_actions)
@@ -540,7 +540,7 @@ class ppo2:
             epinfobuf.extend(epinfos)
 
             mblossvals = []
-            reward_predict_lossvals = []
+            # reward_predict_lossvals = []
             learnstart = time.time()
             if states is None: # nonrecurrent version
                 inds = np.arange(self.nbatch)
@@ -552,9 +552,9 @@ class ppo2:
                         mbinds = inds[start:end]
                         slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                         mblossvals.append(self.model.train(sess, lrnow, cliprangenow, *slices))
-                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5000)
+                        # ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5000)
                         # print(ob_batch.shape, obs.shape)
-                        reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
+                        # reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
 
             else: # recurrent version
                 assert self.nenvs % self.nminibatches == 0
@@ -571,12 +571,12 @@ class ppo2:
                         slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                         mbstates = states[mbenvinds]
                         mblossvals.append(self.model.train(sess, lrnow, cliprangenow, *slices, mbstates))
-                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5000)
-                        reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
+                        # ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5000)
+                        # reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
 
             lossvals = np.mean(mblossvals, axis=0)
-            print(reward_predict_lossvals)
-            reward_lossvals = np.mean(reward_predict_lossvals, axis = 0)
+            # print(reward_predict_lossvals)
+            # reward_lossvals = np.mean(reward_predict_lossvals, axis = 0)
             tnow = time.time()
             sample_time = int((learnstart - tstart))
             learn_time = int((tnow - learnstart))
@@ -604,7 +604,7 @@ class ppo2:
                 logger.logkv('epstepmean', epstepmean)
                 logger.logkv('time_elapsed', tnow - tfirststart)
                 logger.logkv('best_idx', self.best_idx)
-                logger.logkv('reward_loss', reward_lossvals)
+                # logger.logkv('reward_loss', reward_lossvals)
                 for (lossval, lossname) in zip(lossvals, self.model.loss_names):
                     logger.logkv(lossname, lossval)
                 logger.dumpkvs()
