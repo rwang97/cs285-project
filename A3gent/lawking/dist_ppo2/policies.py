@@ -146,10 +146,11 @@ class CnnPolicy(object):
 
     def __init__(self, ob_space, ac_space, nbatch, nsteps, scope="model", reuse=False, collections=None, trainable=True): #pylint: disable=W0613
         nh, nw, nc = ob_space.shape
-        ob_shape = (nbatch, nh, nw, nc)
+        ob_shape = (None, nh, nw, nc)
         nact = ac_space.n
 
-        X = tf.placeholder(tf.uint8, ob_shape)  # obs
+        X = tf.placeholder(tf.uint8, ob_shape, name='X')  # obs
+        # X2 = tf.placeholder(tf.uint8, (5, nh, nw, nc), name='X2')    # reward obs
         given_a = tf.placeholder(tf.int64, (nbatch,))
 
         with tf.variable_scope(scope, reuse=reuse):
@@ -158,6 +159,7 @@ class CnnPolicy(object):
                 h = tf.nn.relu(fc(h, 'fc2', nh=256, init_scale=np.sqrt(2), collections=collections, trainable=trainable))
             pi = fc(h, 'pi', nact, init_scale=0.01, collections=collections, trainable=trainable)
             vf = fc(h, 'v', 1, collections=collections, trainable=trainable)[:,0]
+            rew = fc(h, 'rew', 1, collections=collections, trainable=trainable)[:,0]
 
         self.pdtype = make_pdtype(ac_space)
         self.pd = self.pdtype.pdfromflat(pi)
@@ -195,9 +197,14 @@ class CnnPolicy(object):
             v, neglogp = sess.run([vf, given_neglogp0], {X:ob, given_a: actions})
             return actions, v, self.initial_state, neglogp
 
+        def get_reward(sess, ob, *_args, **_kwargs):
+            return sess.run(rew, {X:ob})
+
+            
         self.X = X
         self.pi = pi
         self.vf = vf
+        self.rew = rew
         self.l2_loss = tf.add_n(tf.get_collection("l2_losses")) if trainable and not collections else None
         self.step = step
         self.step_v2 = step_v2

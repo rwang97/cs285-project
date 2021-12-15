@@ -148,16 +148,20 @@ class ppo2:
             OLDNEGLOGPAC = tf.placeholder(tf.float32, [None])
             OLDVPRED = tf.placeholder(tf.float32, [None])
             LR = tf.placeholder(tf.float32, [])
+            LR2 = tf.placeholder(tf.float32, [])
             CLIPRANGE = tf.placeholder(tf.float32, [])
+            REWARD = tf.placeholder(tf.float32, [None])
 
             neglogpac = train_model.pd.neglogp(A)
             entropy = tf.reduce_mean(train_model.pd.entropy())
 
             vpred = train_model.vf
+            rewardpred = train_model.rew
             vpredclipped = OLDVPRED + tf.clip_by_value(train_model.vf - OLDVPRED, - CLIPRANGE, CLIPRANGE)
             vf_losses1 = tf.square(vpred - R)
             vf_losses2 = tf.square(vpredclipped - R)
             vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+            rew_loss = tf.reduce_mean(tf.square(rewardpred - REWARD))
             ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
             pg_losses = -ADV * ratio
             pg_losses2 = -ADV * tf.clip_by_value(ratio, 1.0 - CLIPRANGE, 1.0 + CLIPRANGE)
@@ -179,15 +183,28 @@ class ppo2:
             #         params_grad.append(p)
 
             grads = tf.gradients(loss, params_grad)
+            grads_reward = tf.gradients(rew_loss, params_grad)
             if max_grad_norm is not None:
                 grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+                grads_reward, _ = tf.clip_by_global_norm(grads_reward, max_grad_norm)
+
             grads = list(zip(grads, params_grad))
+            grads_reward = list(zip(grads_reward, params_grad))
+
             trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
+            trainer2 = tf.train.AdamOptimizer(learning_rate=LR2, epsilon=1e-5)
 
             if global_step:
                 _train = trainer.apply_gradients(grads, global_step=global_step)
+                _rewtrain  = trainer2.apply_gradients(grads_reward, global_step=global_step)
             else:
                 _train = trainer.apply_gradients(grads)
+                _rewtrain = trainer2.apply_gradients(grads_reward)
+
+            def train_reward_predict(sess, lr, obs, rewards):
+                td_map = {train_model.X:obs, LR2:lr, REWARD:rewards}
+
+                return sess.run([rew_loss, _rewtrain], td_map)[:-1]
 
             def train(sess, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
                 advs = returns - values
@@ -251,6 +268,7 @@ class ppo2:
                 # If you want to load weights, also save/load observation scaling inside VecNormalize
 
             self.train = train
+            self.train_reward_predict = train_reward_predict
             self.train_model = train_model
             self.save = save
             self.load = load
@@ -258,7 +276,7 @@ class ppo2:
     class Runner(object):
 
         def __init__(self, *, env, model, nsteps, gamma, lam):
-            self.replay_buffer = ReplayBuffer(12000)
+            self.replay_buffer = ReplayBuffer(9000)
 
             self.env = env
             self.model = model
@@ -490,6 +508,7 @@ class ppo2:
             epinfobuf.extend(epinfos)
 
             mblossvals = []
+            reward_predict_lossvals = []
             learnstart = time.time()
             if states is None: # nonrecurrent version
                 inds = np.arange(self.nbatch)
@@ -501,6 +520,10 @@ class ppo2:
                         mbinds = inds[start:end]
                         slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                         mblossvals.append(self.model.train(sess, lrnow, cliprangenow, *slices))
+
+                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(1000)
+                        # print(ob_batch.shape, obs.shape)
+                        reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
 
             else: # recurrent version
                 assert self.nenvs % self.nminibatches == 0
@@ -517,8 +540,12 @@ class ppo2:
                         slices = (arr[mbflatinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                         mbstates = states[mbenvinds]
                         mblossvals.append(self.model.train(sess, lrnow, cliprangenow, *slices, mbstates))
+                        ob_batch, ac_batch, re_batch, next_ob_batch, terminal_batch = self.runner.sample_random(5)
+                        reward_predict_lossvals.append(self.model.train_reward_predict(sess, lrnow, ob_batch, re_batch))
 
             lossvals = np.mean(mblossvals, axis=0)
+            print(reward_predict_lossvals)
+            reward_lossvals = np.mean(reward_predict_lossvals, axis = 0)
             tnow = time.time()
             sample_time = int((learnstart - tstart))
             learn_time = int((tnow - learnstart))
@@ -546,6 +573,7 @@ class ppo2:
                 logger.logkv('epstepmean', epstepmean)
                 logger.logkv('time_elapsed', tnow - tfirststart)
                 logger.logkv('best_idx', self.best_idx)
+                logger.logkv('reward_loss', reward_lossvals)
                 for (lossval, lossname) in zip(lossvals, self.model.loss_names):
                     logger.logkv(lossname, lossval)
                 logger.dumpkvs()
